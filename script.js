@@ -5,20 +5,21 @@ const firebaseConfig = {
     apiKey: "AIzaSyDxAit93bJOJ1uuxaEcTsin9f3PlhKW_sY",
     authDomain: "bananas-koki.firebaseapp.com",
     projectId: "bananas-koki", 
-    appId: "1:40465389507:web:17157871a1ebb6e4f24f76"
-    // databaseURL não é necessário para o Firestore
+    appId: "1:40465389507:web:17157871a1ebb6e4f24f76",
+    storageBucket: "bananas-koki.appspot.com" // Adicionado para o Storage
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore(); // Inicializa o Firestore
+const storage = firebase.storage(); // NOVO: Inicializa o Storage
 
-// CHAVE SECRETA DO ADM - ESSENCIAL PARA A SEGURANÇA!
 const ADMIN_SECRET_KEY = "czk1lWJTQMexNzCb6jpsn5YXH9j1"; 
 const ADMIN_MODE_KEY = 'bananaskoki_admin_mode';
 
 let siteData = {};
+let currentProductCategoryKey = null; // Categoria atualmente sendo gerenciada
 
-// Dados iniciais (Fallback) - Adaptado para a estrutura do Firestore
+// ... (Restante dos dados iniciais INITIAL_SETTINGS_DOC e INITIAL_CATEGORIES) ...
 const INITIAL_SETTINGS_DOC = {
     siteName: "BANANAS KOKI - Painel ADM",
     whatsapp: "5511999999999",
@@ -34,10 +35,11 @@ const INITIAL_CATEGORIES = [
 
 
 // =================================================================
-// 2. LÓGICA DE ACESSO E RENDERIZAÇÃO ADM (Mapeamento de Dados)
+// 2. LÓGICA DE ACESSO E RENDERIZAÇÃO ADM
 // =================================================================
 
 function checkAdminAccess() {
+    // ... (Mantém a lógica de verificação de acesso)
     const urlParams = new URLSearchParams(window.location.search);
     const uidFromUrl = urlParams.get('uid');
 
@@ -55,14 +57,14 @@ function checkAdminAccess() {
 }
 
 function renderAdminPanel() {
-    // Mapeamento dos dados do Firestore para um formato fácil de usar
     const settings = siteData.settings || INITIAL_SETTINGS_DOC;
     const categoriesMap = siteData.categories || {};
-    
     const adminContainer = document.getElementById('admin-container');
+    const categoryKeys = Object.keys(categoriesMap);
 
     let categoryEditListHTML = '';
-    const categoryKeys = Object.keys(categoriesMap);
+    let categoryOptionsHTML = categoryKeys.map(key => `<option value="${key}">${categoriesMap[key].name}</option>`).join('');
+
 
     categoryKeys.forEach(catKey => {
         const category = categoriesMap[catKey];
@@ -74,12 +76,8 @@ function renderAdminPanel() {
         `;
     });
 
-    // Acessa o produto de exemplo 'p1' dentro da categoria 'prata'
-    const prataCategory = categoriesMap['prata'] || { products: { p1: { price: 0, imgUrl: '' } } };
-    const prataProduct = (prataCategory.products && prataCategory.products.p1) || { price: 0, imgUrl: '' };
-
     const adminHTML = `
-        <h2 class="admin-header">Painel de Administração Único - BANANAS KOKI</h2>
+        <h2 class="admin-header">Painel de Administração - BANANAS KOKI</h2>
 
         <button class="admin-button btn-exit" onclick="exitAdminMode()">Sair do ADM</button>
         <p style="color: #90d4ff; margin-bottom: 20px; font-weight: 500;">Alterações refletem no site principal em tempo real.</p>
@@ -89,11 +87,11 @@ function renderAdminPanel() {
             <form id="general-settings-form" class="admin-form">
                 <label for="admin-site-name">Nome do Site:</label>
                 <input type="text" id="admin-site-name" value="${settings.siteName}">
-                <label for="admin-whatsapp">WhatsApp (apenas números, ex: 5511987654321):</label>
+                <label for="admin-whatsapp">WhatsApp (apenas números):</label>
                 <input type="text" id="admin-whatsapp" value="${settings.whatsapp}">
                 <label for="admin-instagram">Instagram (ex: @bananaskoki):</label>
                 <input type="text" id="admin-instagram" value="${settings.instagram}">
-                <label for="admin-bg-url">URL Foto de Fundo (Cloudinary):</label>
+                <label for="admin-bg-url">URL Foto de Fundo:</label>
                 <input type="url" id="admin-bg-url" value="${settings.bgUrl}">
                 <button type="button" class="admin-button" onclick="saveGeneralSettings()">Salvar Configurações Gerais</button>
             </form>
@@ -107,14 +105,16 @@ function renderAdminPanel() {
         </div>
 
         <div class="admin-section">
-            <h3>3. Edição de Produtos (Banana Prata Premium)</h3>
-            <form id="product-edit-form-prata" class="admin-form">
-                <label for="admin-prata-price">Preço da Prata Premium (R$):</label>
-                <input type="number" step="0.01" id="admin-prata-price" value="${prataProduct.price}">
-                <label for="admin-prata-img">URL da Imagem da Prata (Cloudinary):</label>
-                <input type="url" id="admin-prata-img" value="${prataProduct.imgUrl}">
-                <button type="button" class="admin-button" onclick="saveProductPrice('prata', 'p1')">Salvar Preço e Imagem da Prata</button>
-            </form>
+            <h3>3. Gerenciamento de Produtos (Adicionar, Editar e Excluir)</h3>
+            
+            <label for="category-select">Selecione a Categoria para Gerenciar:</label>
+            <select id="category-select" onchange="renderProductManagement(this.value)">
+                <option value="">-- Selecione uma Categoria --</option>
+                ${categoryOptionsHTML}
+            </select>
+
+            <div id="product-management-area" style="margin-top: 20px;">
+                </div>
         </div>
     `;
 
@@ -122,44 +122,127 @@ function renderAdminPanel() {
     document.title = "ADM - " + settings.siteName;
 }
 
-function exitAdminMode() {
-    sessionStorage.removeItem(ADMIN_MODE_KEY);
-    window.location.href = window.location.pathname; 
+/**
+ * Renderiza a área de gerenciamento de produtos para a categoria selecionada.
+ * @param {string} catKey - A chave da categoria.
+ */
+function renderProductManagement(catKey) {
+    currentProductCategoryKey = catKey;
+    const managementArea = document.getElementById('product-management-area');
+    
+    if (!catKey || !siteData.categories[catKey]) {
+        managementArea.innerHTML = '';
+        return;
+    }
+
+    const category = siteData.categories[catKey];
+    const products = Object.values(category.products || {});
+
+    let tableRowsHTML = '';
+    products.forEach(prod => {
+        tableRowsHTML += `
+            <tr>
+                <td><img src="${prod.imgUrl || 'placeholder.jpg'}" alt="${prod.name}"></td>
+                <td>${prod.name}</td>
+                <td>R$ ${prod.price ? prod.price.toFixed(2).replace('.', ',') : '0,00'}</td>
+                <td>
+                    <button class="admin-button btn-save-category" onclick="openModal('${catKey}', '${prod.id}')">Editar</button>
+                    <button class="admin-button btn-delete-product" onclick="deleteProduct('${catKey}', '${prod.id}', '${prod.imgUrl || ''}')">Excluir</button>
+                </td>
+            </tr>
+        `;
+    });
+
+    managementArea.innerHTML = `
+        <button class="admin-button btn-add-product" onclick="openModal('${catKey}')">Adicionar Novo Produto</button>
+        
+        <table class="product-table">
+            <thead>
+                <tr>
+                    <th>Foto</th>
+                    <th>Nome</th>
+                    <th>Preço</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableRowsHTML}
+            </tbody>
+        </table>
+    `;
+}
+
+// =================================================================
+// 3. FUNÇÕES DE MODAL/CRUD (NOVO)
+// =================================================================
+
+/**
+ * Abre o modal para adicionar ou editar um produto.
+ * @param {string} catKey - Chave da categoria.
+ * @param {string} [prodId] - ID do produto (opcional, para edição).
+ */
+function openModal(catKey, prodId = null) {
+    const modal = document.getElementById('product-modal');
+    const title = document.getElementById('modal-title');
+    const currentImgUrlSpan = document.getElementById('current-img-url');
+    const form = document.getElementById('product-form');
+
+    // Limpa o formulário e inputs de arquivo
+    form.reset();
+    document.getElementById('modal-category-key').value = catKey;
+    document.getElementById('modal-product-id').value = prodId;
+    document.getElementById('product-image-file').value = ''; // Limpa o input file
+
+    if (prodId) {
+        title.innerText = "Editar Produto";
+        const product = siteData.categories[catKey].products[prodId];
+        if (product) {
+            document.getElementById('product-name').value = product.name || '';
+            document.getElementById('product-price').value = product.price || 0;
+            currentImgUrlSpan.innerText = product.imgUrl ? product.imgUrl.substring(0, 50) + '...' : 'N/A';
+        }
+    } else {
+        title.innerText = "Adicionar Novo Produto";
+        currentImgUrlSpan.innerText = 'N/A';
+    }
+
+    modal.style.display = "block";
+}
+
+function closeModal() {
+    document.getElementById('product-modal').style.display = "none";
 }
 
 
 // =================================================================
-// 3. FUNÇÕES DE PERSISTÊNCIA (FIRESTORE COM CHAVE SECRETA)
+// 4. FUNÇÕES DE PERSISTÊNCIA (FIRESTORE E STORAGE COM CHAVE SECRETA)
 // =================================================================
 
 /**
- * Salva as configurações gerais na coleção 'settings' (doc: 'site_config').
- * Inclui o adminKey no payload para passar nas regras de segurança.
+ * Funções saveGeneralSettings e saveCategory não mudam (apenas Firestore)
  */
+
+// ... (Função saveGeneralSettings) ...
 function saveGeneralSettings() {
     const newSettings = {
         siteName: document.getElementById('admin-site-name').value,
         whatsapp: document.getElementById('admin-whatsapp').value,
         instagram: document.getElementById('admin-instagram').value,
         bgUrl: document.getElementById('admin-bg-url').value,
-        adminKey: ADMIN_SECRET_KEY // CHAVE SECRETA INJETADA
+        adminKey: ADMIN_SECRET_KEY 
     };
 
     db.collection('settings').doc('site_config').set(newSettings)
         .then(() => alert("Configurações gerais salvas com sucesso!"))
         .catch((error) => console.error("Erro ao salvar:", error));
 }
-
-/**
- * Salva o nome de uma categoria.
- * Inclui o adminKey no payload para passar nas regras de segurança.
- */
+// ... (Função saveCategory) ...
 function saveCategory(catKey) {
     const newName = document.getElementById(`cat-name-${catKey}`).value;
 
     const updatePayload = {
         name: newName,
-        adminKey: ADMIN_SECRET_KEY // CHAVE SECRETA INJETADA
+        adminKey: ADMIN_SECRET_KEY
     };
 
     db.collection('categories').doc(catKey).update(updatePayload)
@@ -167,70 +250,153 @@ function saveCategory(catKey) {
         .catch((error) => console.error("Erro ao salvar:", error));
 }
 
+
 /**
- * Salva o preço e imagem de um produto.
- * Como o produto está numa subcoleção, o adminKey deve ser injetado diretamente no produto.
+ * Salva o produto (Adicionar ou Editar), gerenciando o upload da imagem no Storage.
  */
-function saveProductPrice(catKey, prodKey) {
-    const newPrice = parseFloat(document.getElementById(`admin-${catKey}-price`).value);
-    const newImgUrl = document.getElementById(`admin-${catKey}-img`).value;
+async function saveProduct() {
+    const catKey = document.getElementById('modal-category-key').value;
+    const prodId = document.getElementById('modal-product-id').value || db.collection('placeholder').doc().id; // Novo ID ou ID existente
+    const fileInput = document.getElementById('product-image-file');
+    
+    // Dados do produto
+    const productName = document.getElementById('product-name').value;
+    const productPrice = parseFloat(document.getElementById('product-price').value);
 
-    if (isNaN(newPrice)) return alert("Preço inválido.");
+    if (!productName || isNaN(productPrice)) {
+        alert("Por favor, preencha o nome e o preço corretamente.");
+        return;
+    }
+    
+    let imgUrl = siteData.categories[catKey]?.products[prodId]?.imgUrl || ''; // URL atual
+    let needsUpdate = false;
 
-    const productUpdate = {
-        price: newPrice,
-        imgUrl: newImgUrl,
+    // 1. UPLOAD DE ARQUIVO (SE UM NOVO ARQUIVO FOI SELECIONADO)
+    if (fileInput.files.length > 0) {
+        alert("Iniciando upload da imagem...");
+        const file = fileInput.files[0];
+        const storageRef = storage.ref(`products/${catKey}/${prodId}_${file.name}`);
+        
+        try {
+            const snapshot = await storageRef.put(file);
+            imgUrl = await snapshot.ref.getDownloadURL(); // Obtém a URL pública
+            needsUpdate = true;
+            alert("Upload concluído! URL da imagem obtida.");
+        } catch (error) {
+            console.error("Erro no upload para o Storage:", error);
+            alert("Erro ao enviar a imagem. Verifique as Regras do Firebase Storage.");
+            return;
+        }
+    }
+    
+    // 2. SALVAR/ATUALIZAR DADOS NO FIRESTORE
+    const productPayload = {
+        id: prodId,
+        name: productName,
+        price: productPrice,
+        imgUrl: imgUrl,
         adminKey: ADMIN_SECRET_KEY // CHAVE SECRETA INJETADA
     };
 
-    db.collection('categories').doc(catKey).collection('products').doc(prodKey).update(productUpdate)
-    .then(() => alert(`Produto '${prodKey}' (Categoria ${catKey}) atualizado com sucesso!`))
-    .catch((error) => console.error("Erro ao salvar:", error));
+    try {
+        await db.collection('categories').doc(catKey).collection('products').doc(prodId).set(productPayload);
+        
+        alert("Produto salvo no Firestore com sucesso!");
+        closeModal();
+        // Recarrega todos os dados para atualizar o painel
+        await loadDataAndRenderAdmin();
+        // Renderiza a seção atual novamente
+        renderProductManagement(catKey);
+
+    } catch (error) {
+        console.error("Erro ao salvar produto no Firestore:", error);
+        alert("Erro ao salvar o produto no Firestore. Detalhes no console.");
+    }
+}
+
+
+/**
+ * Remove o produto do Firestore e a imagem (se houver) do Storage.
+ * @param {string} catKey - Chave da categoria.
+ * @param {string} prodId - ID do produto.
+ * @param {string} imgUrl - URL da imagem para exclusão.
+ */
+async function deleteProduct(catKey, prodId, imgUrl) {
+    if (!confirm(`Tem certeza que deseja EXCLUIR o produto ID: ${prodId} da categoria ${catKey}?`)) {
+        return;
+    }
+
+    try {
+        // A regra de segurança do Firestore permite a exclusão se adminKey estiver presente no payload,
+        // mas para a exclusão do produto, apenas a regra de user/uid é validada.
+        // Como estamos usando a adminKey na escrita, a exclusão por ID é a mais segura.
+
+        // 1. EXCLUIR O DOCUMENTO NO FIRESTORE
+        await db.collection('categories').doc(catKey).collection('products').doc(prodId).delete();
+        
+        alert(`Produto '${prodId}' excluído do Firestore.`);
+
+        // 2. EXCLUIR A IMAGEM NO STORAGE (OPCIONAL, MAS PROFISSIONAL)
+        // OBS: Excluir do Storage é complexo, pois precisamos do nome original do arquivo.
+        // A maneira mais segura é deletar pelo 'path' (products/key/id_filename).
+        // Se a URL do Storage for fornecida (https://firebasestorage.googleapis.com/.../products%2Fprata%2F...):
+        
+        if (imgUrl && imgUrl.includes("firebasestorage")) {
+            // Tenta obter a referência de Storage a partir da URL
+            const imageRef = storage.refFromURL(imgUrl);
+            await imageRef.delete().then(() => {
+                alert("Arquivo de imagem excluído do Storage.");
+            }).catch(e => {
+                console.warn("Aviso: Imagem não encontrada no Storage ou erro ao excluir (pode ser URL externa).", e);
+            });
+        }
+        
+        // 3. ATUALIZAÇÃO DA TELA
+        await loadDataAndRenderAdmin();
+        renderProductManagement(catKey);
+
+    } catch (error) {
+        console.error("Erro ao excluir o produto:", error);
+        alert("Erro ao excluir. Verifique se as Regras de Segurança do Firestore estão corretas para 'delete'.");
+    }
 }
 
 
 // =================================================================
-// 4. INICIALIZAÇÃO ADM (LEITURA DO FIRESTORE)
+// 5. INICIALIZAÇÃO ADM (LEITURA DO FIRESTORE)
 // =================================================================
 
 /**
- * Carrega todos os dados do Firestore: 
- * - Documento 'site_config' da coleção 'settings'.
- * - Todos os documentos da coleção 'categories' e suas subcoleções 'products'.
+ * Mantém a função de inicialização (loadDataAndRenderAdmin) exatamente como está,
+ * pois a leitura dos dados não muda.
  */
 async function loadDataAndRenderAdmin() {
+    // ... (Mantém a lógica de carregamento do Firestore) ...
     try {
-        const data = {
-            settings: {},
-            categories: {}
-        };
+        const data = { settings: {}, categories: {} };
 
         // 1. Carregar Configurações Gerais
         const settingsDoc = await db.collection('settings').doc('site_config').get();
         if (settingsDoc.exists) {
             data.settings = settingsDoc.data();
         } else {
-            // Se não existir, inicializa e salva a primeira vez (sem adminKey na leitura)
             await db.collection('settings').doc('site_config').set(INITIAL_SETTINGS_DOC);
             data.settings = INITIAL_SETTINGS_DOC;
         }
 
-        // 2. Carregar Categorias
+        // 2. Carregar Categorias e Produtos
         const categoriesSnapshot = await db.collection('categories').get();
         
         if (categoriesSnapshot.empty) {
-            // Se a coleção de categorias estiver vazia, inicializa
+            // Inicializa dados se vazio
             for (const cat of INITIAL_CATEGORIES) {
-                // Salva a categoria principal
                 await db.collection('categories').doc(cat.key).set({ name: cat.name });
-                // Salva os produtos na subcoleção
                 for (const prod of cat.products) {
                     await db.collection('categories').doc(cat.key).collection('products').doc(prod.id).set(prod);
                 }
             }
         }
         
-        // Recarrega as categorias após possível inicialização (ou carrega as existentes)
         const currentCategoriesSnapshot = await db.collection('categories').get();
         
         for (const doc of currentCategoriesSnapshot.docs) {
@@ -247,6 +413,12 @@ async function loadDataAndRenderAdmin() {
 
         siteData = data;
         renderAdminPanel();
+
+        // Se uma categoria estava selecionada, renderiza a gestão de produtos novamente
+        if (currentProductCategoryKey) {
+            document.getElementById('category-select').value = currentProductCategoryKey;
+            renderProductManagement(currentProductCategoryKey);
+        }
 
     } catch (error) {
         console.error("Erro ao carregar dados do Firestore:", error);
