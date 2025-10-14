@@ -7,6 +7,7 @@
 
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script> 
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script> 
 
     <style>
         /* Reset e Base */
@@ -17,8 +18,8 @@
             font-family: 'Verdana', sans-serif;
         }
         body { 
-            background: #2c3e50; /* Azul escuro - cor profissional de ADM */
-            color: #ecf0f1; /* Texto claro */
+            background: #2c3e50;
+            color: #ecf0f1; 
             line-height: 1.6;
         }
 
@@ -27,14 +28,14 @@
             max-width: 1000px;
             margin: 40px auto;
             padding: 30px;
-            background: #34495e; /* Fundo do container ADM */
+            background: #34495e;
             border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); /* Efeito 3D sutil */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
         }
         
         /* Título e Header */
         .admin-header {
-            color: #3498db; /* Azul vibrante */
+            color: #3498db;
             text-align: center;
             margin-bottom: 25px;
             font-size: 2.5em;
@@ -48,7 +49,7 @@
             border-radius: 8px;
             margin-bottom: 25px;
             box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.2);
-            border-left: 5px solid #e67e22; /* Laranja para destaque */
+            border-left: 5px solid #e67e22;
         }
         .admin-section h3 {
             color: #f39c12;
@@ -65,9 +66,9 @@
             font-weight: bold;
             color: #bdc3c7;
         }
-        .admin-form input[type="text"], 
-        .admin-form input[type="url"],
-        .admin-form input[type="number"] {
+        .admin-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), 
+        .admin-form select,
+        .admin-form input[type="file"] {
             width: 100%;
             padding: 10px;
             margin-bottom: 15px;
@@ -77,7 +78,7 @@
             color: white;
             transition: all 0.3s;
         }
-        .admin-form input:focus {
+        .admin-form input:focus, .admin-form select:focus {
             background-color: #6a839a;
             box-shadow: 0 0 5px #3498db;
             outline: none;
@@ -95,7 +96,7 @@
         }
         .admin-button:hover {
             opacity: 0.9;
-            transform: translateY(-1px); /* Efeito de profundidade */
+            transform: translateY(-1px);
         }
         .admin-button:active {
             transform: translateY(1px);
@@ -103,24 +104,34 @@
 
         /* Botão Salvar Principal */
         .admin-button[onclick^="saveGeneral"] {
-            background-color: #2ecc71; /* Verde */
+            background-color: #2ecc71;
             color: white;
         }
         /* Botão Sair */
         .btn-exit {
             float: right;
-            background-color: #e74c3c; /* Vermelho */
+            background-color: #e74c3c;
             color: white;
         }
         /* Botão Salvar Categoria */
         .btn-save-category {
-            background-color: #f39c12; /* Laranja */
+            background-color: #f39c12;
             color: #34495e;
             padding: 8px 15px;
             margin-left: 10px;
         }
-
-
+        /* Botão Adicionar Produto */
+        .btn-add-product {
+            background-color: #1abc9c; /* Ciano para adicionar */
+            color: white;
+        }
+        /* Botão Excluir Produto */
+        .btn-delete-product {
+            background-color: #e74c3c;
+            color: white;
+            padding: 5px 10px;
+        }
+        
         /* Lista de Edição de Categorias */
         .category-edit-list {
             list-style: none;
@@ -137,14 +148,79 @@
             width: auto; 
         }
 
+        /* Tabela de Produtos */
+        .product-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .product-table th, .product-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #5d758c;
+        }
+        .product-table th {
+            background-color: #5d758c;
+            color: white;
+            font-weight: 600;
+        }
+        .product-table tr:hover {
+            background-color: #5d758c80;
+        }
+        .product-table img {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+
         /* Mensagem de Acesso Negado */
         .access-message {
             text-align: center;
             padding: 50px;
-            background: #c0392b; /* Vermelho forte */
+            background: #c0392b;
             border-radius: 10px;
         }
         
+        /* Modal (Formulário Adicionar/Editar Produto) */
+        .modal {
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.7);
+            display: none; /* Escondido por padrão */
+            padding-top: 60px;
+        }
+
+        .modal-content {
+            background-color: #34495e;
+            margin: 5% auto;
+            padding: 30px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 600px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: white;
+            text-decoration: none;
+        }
+
+
         /* Responsividade básica */
         @media (max-width: 768px) {
             #admin-container {
@@ -168,6 +244,31 @@
     <div id="admin-container">
         <p style="text-align: center; color: #bdc3c7;">Carregando Painel de Administração...</p>
     </div>
+
+    <div id="product-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal()">&times;</span>
+            <h3 id="modal-title">Adicionar Novo Produto</h3>
+            <form id="product-form" class="admin-form">
+                <input type="hidden" id="modal-category-key"> 
+                <input type="hidden" id="modal-product-id"> 
+
+                <label for="product-name">Nome do Produto:</label>
+                <input type="text" id="product-name" required>
+
+                <label for="product-price">Preço (R$):</label>
+                <input type="number" step="0.01" id="product-price" required>
+                
+                <label for="product-image-file">Foto do Produto (Substituirá a atual):</label>
+                <input type="file" id="product-image-file" accept="image/*">
+                
+                <p style="margin: 10px 0; font-size: 0.9em; color: #95a5a6;">URL da Imagem Atual: <span id="current-img-url" style="color: #f39c12; word-break: break-all;">N/A</span></p>
+
+                <button type="button" class="admin-button btn-add-product" onclick="saveProduct()">Salvar Produto</button>
+            </form>
+        </div>
+    </div>
+
 
     <script src="script.js"></script>
 </body>
