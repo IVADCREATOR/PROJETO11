@@ -7,10 +7,11 @@
 
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script> 
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script> 
+    
+    <script src="https://upload-widget.cloudinary.com/global/all.js" type="text/javascript"></script>
 
     <style>
-        /* Reset e Base */
+        /* ... (MANTENHA O CSS EXISTENTE) ... */
         * { 
             margin: 0; 
             padding: 0; 
@@ -130,6 +131,15 @@
             background-color: #e74c3c;
             color: white;
             padding: 5px 10px;
+        }
+
+        /* Botão Cloudinary Upload */
+        .btn-cloudinary-upload {
+            background-color: #007bff; /* Azul para upload */
+            color: white;
+            width: 100%;
+            display: block;
+            text-align: center;
         }
         
         /* Lista de Edição de Categorias */
@@ -259,10 +269,13 @@
                 <label for="product-price">Preço (R$):</label>
                 <input type="number" step="0.01" id="product-price" required>
                 
-                <label for="product-image-file">Foto do Produto (Substituirá a atual):</label>
-                <input type="file" id="product-image-file" accept="image/*">
+                <label for="product-img-url">Foto do Produto (Cloudinary):</label>
+                <input type="text" id="product-img-url" placeholder="URL da imagem será preenchida automaticamente" readonly required>
+                <button type="button" class="admin-button btn-cloudinary-upload" onclick="openCloudinaryWidget()">
+                    <i class="fas fa-camera"></i> Escolher/Enviar Foto da Galeria
+                </button>
                 
-                <p style="margin: 10px 0; font-size: 0.9em; color: #95a5a6;">URL da Imagem Atual: <span id="current-img-url" style="color: #f39c12; word-break: break-all;">N/A</span></p>
+                <p style="margin: 10px 0; font-size: 0.9em; color: #95a5a6;">URL Atual: <span id="current-img-url" style="color: #f39c12; word-break: break-all;">N/A</span></p>
 
                 <button type="button" class="admin-button btn-add-product" onclick="saveProduct()">Salvar Produto</button>
             </form>
