@@ -6,20 +6,25 @@ const firebaseConfig = {
     authDomain: "bananas-koki.firebaseapp.com",
     projectId: "bananas-koki", 
     appId: "1:40465389507:web:17157871a1ebb6e4f24f76",
-    storageBucket: "bananas-koki.appspot.com" // Adicionado para o Storage
+    // storageBucket não é necessário para Cloudinary
 };
 
 firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore(); // Inicializa o Firestore
-const storage = firebase.storage(); // NOVO: Inicializa o Storage
+const db = firebase.firestore(); 
+// REMOVIDO: const storage = firebase.storage(); 
 
 const ADMIN_SECRET_KEY = "czk1lWJTQMexNzCb6jpsn5YXH9j1"; 
 const ADMIN_MODE_KEY = 'bananaskoki_admin_mode';
 
 let siteData = {};
-let currentProductCategoryKey = null; // Categoria atualmente sendo gerenciada
+let currentProductCategoryKey = null; 
 
-// ... (Restante dos dados iniciais INITIAL_SETTINGS_DOC e INITIAL_CATEGORIES) ...
+// CONFIGURAÇÕES DO CLOUDINARY
+// Mude 'SEU_CLOUD_NAME' e 'SEU_UPLOAD_PRESET' pelos seus valores reais
+const CLOUDINARY_CLOUD_NAME = "dbyxore1h"; // Exemplo, substitua pelo seu
+const CLOUDINARY_UPLOAD_PRESET = "produtos_koki_preset"; // Crie um unsigned upload preset no seu Cloudinary
+
+// ... (MANTÉM O RESTANTE DOS DADOS INICIAIS) ...
 const INITIAL_SETTINGS_DOC = {
     siteName: "BANANAS KOKI - Painel ADM",
     whatsapp: "5511999999999",
@@ -35,7 +40,7 @@ const INITIAL_CATEGORIES = [
 
 
 // =================================================================
-// 2. LÓGICA DE ACESSO E RENDERIZAÇÃO ADM
+// 2. LÓGICA DE ACESSO E RENDERIZAÇÃO ADM (MANTÉM)
 // =================================================================
 
 function checkAdminAccess() {
@@ -57,6 +62,7 @@ function checkAdminAccess() {
 }
 
 function renderAdminPanel() {
+    // ... (Mantém a função renderAdminPanel, que renderiza o HTML principal) ...
     const settings = siteData.settings || INITIAL_SETTINGS_DOC;
     const categoriesMap = siteData.categories || {};
     const adminContainer = document.getElementById('admin-container');
@@ -122,11 +128,8 @@ function renderAdminPanel() {
     document.title = "ADM - " + settings.siteName;
 }
 
-/**
- * Renderiza a área de gerenciamento de produtos para a categoria selecionada.
- * @param {string} catKey - A chave da categoria.
- */
 function renderProductManagement(catKey) {
+    // ... (Mantém a função renderProductManagement) ...
     currentProductCategoryKey = catKey;
     const managementArea = document.getElementById('product-management-area');
     
@@ -147,7 +150,7 @@ function renderProductManagement(catKey) {
                 <td>R$ ${prod.price ? prod.price.toFixed(2).replace('.', ',') : '0,00'}</td>
                 <td>
                     <button class="admin-button btn-save-category" onclick="openModal('${catKey}', '${prod.id}')">Editar</button>
-                    <button class="admin-button btn-delete-product" onclick="deleteProduct('${catKey}', '${prod.id}', '${prod.imgUrl || ''}')">Excluir</button>
+                    <button class="admin-button btn-delete-product" onclick="deleteProduct('${catKey}', '${prod.id}')">Excluir</button>
                 </td>
             </tr>
         `;
@@ -173,7 +176,7 @@ function renderProductManagement(catKey) {
 }
 
 // =================================================================
-// 3. FUNÇÕES DE MODAL/CRUD (NOVO)
+// 3. FUNÇÕES DE MODAL/CRUD E CLOUDINARY
 // =================================================================
 
 /**
@@ -187,11 +190,11 @@ function openModal(catKey, prodId = null) {
     const currentImgUrlSpan = document.getElementById('current-img-url');
     const form = document.getElementById('product-form');
 
-    // Limpa o formulário e inputs de arquivo
+    // Limpa o formulário
     form.reset();
     document.getElementById('modal-category-key').value = catKey;
     document.getElementById('modal-product-id').value = prodId;
-    document.getElementById('product-image-file').value = ''; // Limpa o input file
+    document.getElementById('product-img-url').value = ''; 
 
     if (prodId) {
         title.innerText = "Editar Produto";
@@ -199,6 +202,7 @@ function openModal(catKey, prodId = null) {
         if (product) {
             document.getElementById('product-name').value = product.name || '';
             document.getElementById('product-price').value = product.price || 0;
+            document.getElementById('product-img-url').value = product.imgUrl || ''; 
             currentImgUrlSpan.innerText = product.imgUrl ? product.imgUrl.substring(0, 50) + '...' : 'N/A';
         }
     } else {
@@ -213,17 +217,44 @@ function closeModal() {
     document.getElementById('product-modal').style.display = "none";
 }
 
-
-// =================================================================
-// 4. FUNÇÕES DE PERSISTÊNCIA (FIRESTORE E STORAGE COM CHAVE SECRETA)
-// =================================================================
-
 /**
- * Funções saveGeneralSettings e saveCategory não mudam (apenas Firestore)
+ * Abre o widget de upload do Cloudinary para selecionar a foto da galeria/dispositivo.
  */
+function openCloudinaryWidget() {
+    // Configuração do Widget
+    const myWidget = cloudinary.createUploadWidget({
+        cloudName: CLOUDINARY_CLOUD_NAME,
+        uploadPreset: CLOUDINARY_UPLOAD_PRESET,
+        // Limita a apenas arquivos de imagem
+        resourceType: 'image', 
+        // Permite selecionar de várias fontes (galeria, URL, etc.)
+        sources: [ 'local', 'url', 'camera' ], 
+        multiple: false, // Permite apenas uma foto por vez
+        maxImageFileSize: 5000000, // Limite de 5MB
+        
+    }, (error, result) => {
+        if (!error && result && result.event === "success") {
+            console.log('Upload concluído com sucesso! Detalhes:', result.info);
+            // Preenche o campo de URL no modal
+            document.getElementById('product-img-url').value = result.info.secure_url;
+            document.getElementById('current-img-url').innerText = result.info.secure_url.substring(0, 50) + '...';
+            alert("Foto carregada com sucesso! Clique em 'Salvar Produto' para finalizar.");
+        }
+        if (error) {
+            console.error("Erro no Widget do Cloudinary:", error);
+            alert("Erro ao tentar carregar a foto. Verifique suas credenciais no script.js e se o Upload Preset está 'Unsigned'.");
+        }
+    });
 
-// ... (Função saveGeneralSettings) ...
+    myWidget.open();
+}
+
+// =================================================================
+// 4. FUNÇÕES DE PERSISTÊNCIA (FIRESTORE COM CHAVE SECRETA)
+// =================================================================
+
 function saveGeneralSettings() {
+    // ... (Mantém a lógica)
     const newSettings = {
         siteName: document.getElementById('admin-site-name').value,
         whatsapp: document.getElementById('admin-whatsapp').value,
@@ -236,8 +267,9 @@ function saveGeneralSettings() {
         .then(() => alert("Configurações gerais salvas com sucesso!"))
         .catch((error) => console.error("Erro ao salvar:", error));
 }
-// ... (Função saveCategory) ...
+
 function saveCategory(catKey) {
+    // ... (Mantém a lógica)
     const newName = document.getElementById(`cat-name-${catKey}`).value;
 
     const updatePayload = {
@@ -252,50 +284,28 @@ function saveCategory(catKey) {
 
 
 /**
- * Salva o produto (Adicionar ou Editar), gerenciando o upload da imagem no Storage.
+ * Salva o produto (Adicionar ou Editar), usando a URL preenchida pelo Cloudinary Widget.
  */
 async function saveProduct() {
     const catKey = document.getElementById('modal-category-key').value;
-    const prodId = document.getElementById('modal-product-id').value || db.collection('placeholder').doc().id; // Novo ID ou ID existente
-    const fileInput = document.getElementById('product-image-file');
+    const prodId = document.getElementById('modal-product-id').value || db.collection('placeholder').doc().id; 
     
     // Dados do produto
     const productName = document.getElementById('product-name').value;
     const productPrice = parseFloat(document.getElementById('product-price').value);
+    const imgUrl = document.getElementById('product-img-url').value; 
 
-    if (!productName || isNaN(productPrice)) {
-        alert("Por favor, preencha o nome e o preço corretamente.");
+    if (!productName || isNaN(productPrice) || !imgUrl) {
+        alert("Por favor, preencha todos os campos, incluindo a foto via Cloudinary.");
         return;
     }
     
-    let imgUrl = siteData.categories[catKey]?.products[prodId]?.imgUrl || ''; // URL atual
-    let needsUpdate = false;
-
-    // 1. UPLOAD DE ARQUIVO (SE UM NOVO ARQUIVO FOI SELECIONADO)
-    if (fileInput.files.length > 0) {
-        alert("Iniciando upload da imagem...");
-        const file = fileInput.files[0];
-        const storageRef = storage.ref(`products/${catKey}/${prodId}_${file.name}`);
-        
-        try {
-            const snapshot = await storageRef.put(file);
-            imgUrl = await snapshot.ref.getDownloadURL(); // Obtém a URL pública
-            needsUpdate = true;
-            alert("Upload concluído! URL da imagem obtida.");
-        } catch (error) {
-            console.error("Erro no upload para o Storage:", error);
-            alert("Erro ao enviar a imagem. Verifique as Regras do Firebase Storage.");
-            return;
-        }
-    }
-    
-    // 2. SALVAR/ATUALIZAR DADOS NO FIRESTORE
     const productPayload = {
         id: prodId,
         name: productName,
         price: productPrice,
-        imgUrl: imgUrl,
-        adminKey: ADMIN_SECRET_KEY // CHAVE SECRETA INJETADA
+        imgUrl: imgUrl, 
+        adminKey: ADMIN_SECRET_KEY 
     };
 
     try {
@@ -303,9 +313,7 @@ async function saveProduct() {
         
         alert("Produto salvo no Firestore com sucesso!");
         closeModal();
-        // Recarrega todos os dados para atualizar o painel
         await loadDataAndRenderAdmin();
-        // Renderiza a seção atual novamente
         renderProductManagement(catKey);
 
     } catch (error) {
@@ -316,42 +324,18 @@ async function saveProduct() {
 
 
 /**
- * Remove o produto do Firestore e a imagem (se houver) do Storage.
- * @param {string} catKey - Chave da categoria.
- * @param {string} prodId - ID do produto.
- * @param {string} imgUrl - URL da imagem para exclusão.
+ * Remove o produto do Firestore. (A exclusão no Cloudinary deve ser manual/via backend seguro).
  */
-async function deleteProduct(catKey, prodId, imgUrl) {
-    if (!confirm(`Tem certeza que deseja EXCLUIR o produto ID: ${prodId} da categoria ${catKey}?`)) {
+async function deleteProduct(catKey, prodId) {
+    if (!confirm(`Tem certeza que deseja EXCLUIR o produto ID: ${prodId} da categoria ${catKey}? (A foto deve ser excluída manualmente do Cloudinary)`)) {
         return;
     }
 
     try {
-        // A regra de segurança do Firestore permite a exclusão se adminKey estiver presente no payload,
-        // mas para a exclusão do produto, apenas a regra de user/uid é validada.
-        // Como estamos usando a adminKey na escrita, a exclusão por ID é a mais segura.
-
-        // 1. EXCLUIR O DOCUMENTO NO FIRESTORE
         await db.collection('categories').doc(catKey).collection('products').doc(prodId).delete();
         
         alert(`Produto '${prodId}' excluído do Firestore.`);
-
-        // 2. EXCLUIR A IMAGEM NO STORAGE (OPCIONAL, MAS PROFISSIONAL)
-        // OBS: Excluir do Storage é complexo, pois precisamos do nome original do arquivo.
-        // A maneira mais segura é deletar pelo 'path' (products/key/id_filename).
-        // Se a URL do Storage for fornecida (https://firebasestorage.googleapis.com/.../products%2Fprata%2F...):
         
-        if (imgUrl && imgUrl.includes("firebasestorage")) {
-            // Tenta obter a referência de Storage a partir da URL
-            const imageRef = storage.refFromURL(imgUrl);
-            await imageRef.delete().then(() => {
-                alert("Arquivo de imagem excluído do Storage.");
-            }).catch(e => {
-                console.warn("Aviso: Imagem não encontrada no Storage ou erro ao excluir (pode ser URL externa).", e);
-            });
-        }
-        
-        // 3. ATUALIZAÇÃO DA TELA
         await loadDataAndRenderAdmin();
         renderProductManagement(catKey);
 
@@ -363,13 +347,9 @@ async function deleteProduct(catKey, prodId, imgUrl) {
 
 
 // =================================================================
-// 5. INICIALIZAÇÃO ADM (LEITURA DO FIRESTORE)
+// 5. INICIALIZAÇÃO ADM (MANTÉM)
 // =================================================================
 
-/**
- * Mantém a função de inicialização (loadDataAndRenderAdmin) exatamente como está,
- * pois a leitura dos dados não muda.
- */
 async function loadDataAndRenderAdmin() {
     // ... (Mantém a lógica de carregamento do Firestore) ...
     try {
@@ -414,7 +394,6 @@ async function loadDataAndRenderAdmin() {
         siteData = data;
         renderAdminPanel();
 
-        // Se uma categoria estava selecionada, renderiza a gestão de produtos novamente
         if (currentProductCategoryKey) {
             document.getElementById('category-select').value = currentProductCategoryKey;
             renderProductManagement(currentProductCategoryKey);
@@ -426,6 +405,12 @@ async function loadDataAndRenderAdmin() {
     }
 }
 
+
+// Funções Auxiliares de Navegação (MANTÉM)
+function exitAdminMode() {
+    sessionStorage.removeItem(ADMIN_MODE_KEY);
+    window.location.href = window.location.pathname; // Recarrega sem o UID na URL
+}
 
 // Inicia a checagem de acesso ao carregar a página
 checkAdminAccess();
